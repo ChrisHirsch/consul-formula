@@ -102,8 +102,9 @@ consul|join-cluster:
   cmd.run:
     - name: {{ consul.install_path }}/consul join {{ consul.join_server|random }} {{ consul.join_server|random }} {{ consul.join_server|random }} {{ consul.join_server|random }} {{ consul.join_server|random }}
     - creates: {{ consul.home_dir }}/data/raft/peers.json
+    - require:
+      - service: consul|ensure-started
 {%- endif %}
-
 
 {% if consul.is_ui %}
 consul|install-web-ui:

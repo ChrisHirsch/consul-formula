@@ -15,13 +15,30 @@
 
 {%- set targeting_method = salt['pillar.get']('consul:targeting_method', 'glob') %}
 
-{%- if salt['grains.get']('consul_server_target') != '': %}
+# If the user has explicitly set the consul_server_target to True then we know that 
+# the node should be a consul server and we explicity set the grain for consul_server_target grain to True
+# so we can then send the grain up to the salt mine and gather all nodes who are a consul server
+{%- if salt['grains.get']('consul_server_target') == True: %}
        {%- set server_target = salt['grains.get']('consul_server_target') %}
        {%- set is_server = True %}
+# Since we don't have an explicit grain set (consul_server_target) then look for the pillar consul:server_target
+# If our host matches that server_target then set the consul_server_target_from_pillar grain to True otherwise
+# remove consul_server_target_from_pillar grain 
 {%- else %}
        {%- set server_target = salt['pillar.get']('consul:server_target') %}
        {%- set is_server = salt['match.' ~ targeting_method](server_target) %}
+       # If the node is a server then set the consul_server_target_from_pillar grain on the node to True
+       {%- if is_server == True %}
+          {%- set grain = salt['grains.setval']('consul_server_target_from_pillar', True) %}
+       # The node is NOT a  server so remove the grain consul_server_target_from_pillar grain on the node completely 
+       {%- else %}
+          # Use delval vs remove otherwise the key and value won't actually be removed
+          {%- set grain = salt['grains.delval']('consul_server_target_from_pillar', destructive=True) %}
+       {%- endif %}
+       # Update the mind with our newly set/deleted grains
 {%- endif %}
+# We probably don't want to send this every time..maybe only for the two grains we care about?
+{%- set force_mine_update = salt['mine.send']('grains.items') %}
 
 {%- if salt['grains.get']('consul_ui_target') != '': %}
        {%- set ui_target = salt['grains.get']('consul_ui_target') %}
@@ -44,18 +61,21 @@
 {%- endif %}
 
 {%- set nodename = salt['grains.get']('nodename') %}
-{%- set force_mine_update = salt['mine.send']('network.get_hostname') %}
-{%- set servers = salt['mine.get'](server_target, 'network.get_hostname', targeting_method).values() %}
-
+{%- set join_server = [] %}
 # Create a list of servers that can be used to join the cluster
 # Jinja vars are immutable in a loop so you have to do the 'do' trick to append to the list
 # http://stackoverflow.com/questions/17925674/jinja2-local-global-variable
-{% set servers = ['im', 'devopsdev', 'devopsdump' ] %}
-{% set join_server = [] %}
-{% for server in servers if server != nodename %}
-    {% do join_server.append(server) %}
-{% endfor %}
-
+# Loop through all boxes that are tagged as a consul_server_target (True) or consul_server_target_from_pillar (True) 
+# and get the hostname of each box and then append that hostname to a list of all our consul servers
+# @LOOKHERE - Is there a way to combine the two for loops like ('consul_server_target:True or consul_server_target_from_pillar:True')?
+# Otherwise we do a lot LOT of redundant server calls
+{% set servers = [] %}
+{% for host, servers in salt['mine.get']('consul_server_target:True', 'network.get_hostname', expr_form='grain').items() %}
+    {% do join_server.append(servers) %}
+{%- endfor %}
+{% for host, servers in salt['mine.get']('consul_server_target_from_pillar:True', 'network.get_hostname', expr_form='grain').items() %}
+    {% do join_server.append(servers) %}
+{%- endfor %}
 
 {%- set consul = {} %}
 {%- do consul.update({
@@ -80,6 +100,6 @@
     'bootstrap_target': bootstrap_target,
     'join_server': join_server,
     'datacenter': datacenter,
-    'manage_firewall': manage_firewall
-
+    'manage_firewall': manage_firewall,
+    'servers': servers
 }) %}
