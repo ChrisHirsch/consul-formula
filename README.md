@@ -69,7 +69,7 @@ You may also set a specifc node to a ui_target via a grain:
 ```
 salt <node> grains.setval consul_ui_target True
 ```
-which will populate /etc/salt/grains with the key of consul_ui_target and value of "True"
+which will populate /etc/salt/grains with the key of consul_ui_target and value of "true"
 
 To delete the grain 
 ```
@@ -80,7 +80,7 @@ You may also set a specifc node to a server via a grain:
 ```
 salt <node> grains.setval consul_server_target True
 ```
-which will populate /etc/salt/grains with the key of consul_server_target and value of "True"
+which will populate /etc/salt/grains with the key of consul_server_target and value of "true"
 
 To delete the grain 
 ```
